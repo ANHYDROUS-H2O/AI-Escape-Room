@@ -1,17 +1,24 @@
 from vpython import *
 import random
-import math
+import time
 
 scene = canvas(width=1523, height=693)
 
 width = 0.1
 height = 5
 thickness = 0.1
-plate_pressed = 0
 
-sleep1 = 0.001
-sleep2 = 0.12
-sleep3 = 0.1
+
+sleep1 = 0#0.001
+sleep2 = 0#0.12
+sleep3 = 0#0.1
+
+plate_pressed = 0
+reward = 0
+
+time_limit = 60  # 60 seconds
+start_time = time.time()
+current_time = start_time
 
 wall1 = box(pos=vector(-5,5,-10), size=vector(10,10,1))
 wall2 = box(pos=vector(5,5,-10), size=vector(10,10,1))
@@ -24,8 +31,10 @@ floor2 = box(pos=vector(5, 0, -2.5), size=vector(10,0.1,15))
 distant_light(direction=vector(1, 0, 0), color=color.white, intensity=0.5, attenuation=0.2)
 distant_light(direction=vector(-1, 0, 0), color=color.white, intensity=0.5, attenuation=0.2)
 isaac1 = box(pos=vector(0,0.5,0), size=vector(1,1,1), color=color.orange)
-isaac2 = box(pos=vector(0.51,0.75,-0.15), size=vector(0.1,0.1,0.1), color=color.black)
-isaac3 = box(pos=vector(0.51,0.75,0.15), size=vector(0.1,0.1,0.1), color=color.black)
+isaac2 = sphere(pos=vector(0.51,0.75,-0.15), radius=0.07, color=color.black)
+isaac3 = sphere(pos=vector(0.51,0.75,0.15), radius=0.07, color=color.black)
+# isaac2 = box(pos=vector(0.51,0.75,-0.15), size=vector(0.1,0.1,0.1), color=color.black)
+# isaac3 = box(pos=vector(0.51,0.75,0.15), size=vector(0.1,0.1,0.1), color=color.black)
 v1 = sphere(pos=vector(-0.5,1,-0.5), radius=0.1, color=color.red)
 v2 = sphere(pos=vector(0.5,1,-0.5), radius=0.1, color=color.red)
 v3 = sphere(pos=vector(0.5,1,0.5), radius=0.1, color=color.red)
@@ -101,18 +110,24 @@ def room_bounds(dx,dy,dz):
         return False
 
 def rotational_bound(t, a):
-    org_pos = v1.pos,v2.pos,v3.pos,v4.pos
     v1.rotate(angle=radians(t), axis=a, origin=isaac.pos)
     v2.rotate(angle=radians(t), axis=a, origin=isaac.pos)
     v3.rotate(angle=radians(t), axis=a, origin=isaac.pos)
     v4.rotate(angle=radians(t), axis=a, origin=isaac.pos) 
     if not room_bounds(0, 0, 0):
-        v1.pos,v2.pos,v3.pos,v4.pos = org_pos
+        v1.rotate(angle=radians(-t), axis=a, origin=isaac.pos)
+        v2.rotate(angle=radians(-t), axis=a, origin=isaac.pos)
+        v3.rotate(angle=radians(-t), axis=a, origin=isaac.pos)
+        v4.rotate(angle=radians(-t), axis=a, origin=isaac.pos) 
         return False
-    v1.pos,v2.pos,v3.pos,v4.pos = org_pos
+    v1.rotate(angle=radians(-t), axis=a, origin=isaac.pos)
+    v2.rotate(angle=radians(-t), axis=a, origin=isaac.pos)
+    v3.rotate(angle=radians(-t), axis=a, origin=isaac.pos)
+    v4.rotate(angle=radians(-t), axis=a, origin=isaac.pos) 
     return True
 
 def is_cube_over_edge():
+    global reward
     edge_position = 5.5
     aor = vector(isaac.pos.x, isaac.pos.y - 0.5, isaac.pos.z)
 
@@ -125,16 +140,21 @@ def is_cube_over_edge():
             isaac.pos.y -= 0.1
             isaac.rotate(angle=-0.15, axis=vector(-1, 0, 0))
             sleep(0.01)
-        
+        reward -= 5
+        reset()
         return True
 
     elif aor.z - edge_position >= 0:
-        while True:
+        i = 0
+        while i<=100:
             translate(0, -0.1, 0.02)
-
+            i += 1
+        reward -= 5
+        reset()
     return False 
 
 def pressureplate():
+    global reward
     if (plate.pos.x - 1.5 <= isaac.pos.x <= plate.pos.x + 1.5
         and plate.pos.z - 1 - 0.5 <= isaac.pos.z <= plate.pos.z + 1 + 0.5
         and plate.pos.y + 0.4 == isaac.pos.y):
@@ -155,6 +175,14 @@ def pressureplate():
             sleep(sleep3)
 
         rods.pos.y = 7
+        reward += 10
+
+def reset():
+    isaac.pos = vector(0, 0.5, 0)
+    v1.pos = vector(-0.5, 1, -0.5)
+    v2.pos = vector(0.5, 1, -0.5)
+    v3.pos = vector(0.5, 1, 0.5)
+    v4.pos = vector(-0.5, 1, 0.5)
 
 def apply_movement(move):
     if move == 'jump':
@@ -211,9 +239,7 @@ def apply_movement(move):
         deceleration = 0
         acceleration = 8.5
 
-        if rotational_bound(t, vector(0, 1, 0)):
-            t = 0
-        while isaac.pos.y <=2.5 and sum <= 35:        
+        while isaac.pos.y <=2.5 and sum <= 35 and rotational_bound(t, vector(0, 1, 0)):        
             isaac.pos.y += (10.0-deceleration)*0.01
             rotate(t, vector(0, 1, 0))
             angle -= t
@@ -222,7 +248,7 @@ def apply_movement(move):
             sum+=1
             sleep(sleep1)
    
-        while(isaac.pos.y > 0.5) and sum<=70:
+        while(isaac.pos.y > 0.5) and sum<=70 and rotational_bound(t, vector(0, 1, 0)):
             isaac.pos.y += (-10+acceleration) * 0.01
             rotate(t, vector(0, 1, 0))
             angle -= t
@@ -299,10 +325,19 @@ def apply_movement(move):
 
 while True:
     rate(60)
+    current_time = time.time()
+    if current_time - start_time > time_limit:
+        print("Time limit exceeded! Game over.")
+        reset()
+    print(reward)
     pressureplate()
     # sleep(1)
     move = random.choice(['front','back','turn','jump','jump turn','jump front','jump back'])
-    print("MOVE:",move)
+    # print("MOVE:",move)
     apply_movement(move)
     
 
+# press pressureplate -> +10
+# Escape Room -> +20
+# Fall Over Edge -> -5
+# Run Out of Time -> -5
