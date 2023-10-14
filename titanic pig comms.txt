@@ -1,0 +1,49 @@
+-- Step 1: Load the Titanic dataset
+titanic_data = LOAD 'path_to_titanic_data.csv' USING PigStorage(',') AS (PassengerId:int, Pclass:int, Name:chararray, Sex:chararray, Age:double, SibSp:int, Parch:int, Ticket:chararray, Fare:double, Cabin:chararray, Embarked:chararray, Survived:int);
+
+-- Step 2: Preprocess the data (cleaning, handling missing values, etc.)
+-- For simplicity, let's assume that you've already preprocessed the data.
+
+-- Step 3: Feature selection and extraction (if needed)
+-- For simplicity, let's assume you're using all available features.
+
+-- Step 4: Split the data into training and testing sets
+SPLIT titanic_data INTO training_data IF RANDOM() < 0.7, testing_data IF RANDOM() >= 0.7;
+
+-- Step 5: Train a decision tree classifier using Mahout
+REGISTER '/path/to/mahout-core-<version>.jar';
+REGISTER '/path/to/mahout-math-<version>.jar';
+REGISTER '/path/to/mahout-examples-<version>.jar';
+
+train_model = FOREACH training_data GENERATE
+    Pclass, Sex, Age, SibSp, Parch, Fare, Embarked, Survived as label;
+
+STORE train_model INTO 'train_model' USING PigStorage(',');
+
+runMahoutJob = LOAD 'train_model' USING PigStorage(',') as (Pclass:int, Sex:chararray, Age:double, SibSp:int, Parch:int, Fare:double, Embarked:chararray, label:int);
+
+runMahoutJob_Grouped = GROUP runMahoutJob ALL;
+runMahoutJob_Count = FOREACH runMahoutJob_Grouped GENERATE COUNT(runMahoutJob) AS total_records;
+runMahoutJob_Split = FOREACH runMahoutJob GENERATE Pclass, Sex, Age, SibSp, Parch, Fare, Embarked, label, (double)RAND() as random;
+
+runMahoutJob_Sampled = FILTER runMahoutJob_Split BY random <= 0.8;
+
+-- Training the decision tree
+runMahoutJob_Train = FOREACH runMahoutJob_Sampled GENERATE Pclass, Sex, Age, SibSp, Parch, Fare, Embarked, label;
+
+runMahoutJob_Model = FOREACH runMahoutJob_Grouped GENERATE FLATTEN(TRAIN ('classifier=dt', runMahoutJob_Train, '')) as (model:bytearray);
+
+-- Step 6: Apply the trained model to the test data
+test_data = FOREACH testing_data GENERATE
+    Pclass, Sex, Age, SibSp, Parch, Fare, Embarked, Survived as actual_label;
+
+runMahoutJob_Test = FOREACH test_data GENERATE Pclass, Sex, Age, SibSp, Parch, Fare, Embarked;
+
+predicted_data = FOREACH runMahoutJob_Test GENERATE
+    FLATTEN(PREDICT runMahoutJob_Model runMahoutJob_Test) as (predicted_label:int);
+
+-- Step 7: Evaluate the model (optional)
+-- Depending on your evaluation criteria, you can compare predicted_data with actual_data.
+
+-- Step 8: Store or further process the predictions as needed
+STORE predicted_data INTO 'predicted_data' USING PigStorage(',');
